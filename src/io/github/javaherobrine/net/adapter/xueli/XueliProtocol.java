@@ -9,14 +9,18 @@ import io.github.javaherobrine.net.*;
  * <p>
  * This protocol bridges CraftGame TCP Library's Protocol/EventContent system
  * with xueli.game2.network.Packet format. It serializes packets with their classID
- * in little-endian byte order for proper type identification during transmission,
- * matching the xueli.utils.Bytes specification.
+ * using VAR_INT encoding for proper type identification during transmission,
+ * matching the xueli.game2.network.pipeline specification.
  * </p>
  *
  * <h2>Wire Format:</h2>
  * <pre>
- * [classID: 4 bytes, little-endian][packet data: variable length]
+ * [classID: VAR_INT][packet data: variable length]
  * </pre>
+ * <p>
+ * VAR_INT encoding uses variable-length format where each byte contains 7 bits of data
+ * and 1 continuation bit (MSB). Values 0-127 use 1 byte, larger values use more bytes.
+ * </p>
  *
  * <h2>Usage Example:</h2>
  * <pre>
@@ -51,13 +55,8 @@ public class XueliProtocol extends Protocol{
 			throw new IOException("Input stream is not initialized");
 		}
 
-		// Read the classID (4 bytes for int, little-endian)
-		byte[] idBytes = new byte[4];
-		int bytesRead = in.read(idBytes);
-		if (bytesRead != 4) {
-			throw new IOException("Failed to read classID");
-		}
-		int classID = bytesToInt(idBytes);
+		// Read the classID using VAR_INT encoding
+		int classID = readVarInt(in);
 
 		// Get the packet factory for this classID
 		Supplier<Packet> packetSupplier = packetRegistry.get(classID);
@@ -85,9 +84,8 @@ public class XueliProtocol extends Protocol{
 
 		Packet packet = (Packet) ec;
 
-		// Write the classID (little-endian)
-		byte[] idBytes = intToBytes(packet.classID);
-		out.write(idBytes);
+		// Write the classID using VAR_INT encoding
+		writeVarInt(packet.classID, out);
 
 		// Encode packet data and write to stream
 		byte[] data = packet.encode();
@@ -96,24 +94,64 @@ public class XueliProtocol extends Protocol{
 	}
 
 	/**
-	 * Convert int to byte array in little-endian format (LSB first).
-	 * Compatible with xueli.utils.Bytes.getBytes(int).
+	 * Read a VAR_INT from the input stream.
+	 * Compatible with xueli.game2.network.PrimitiveCodec.VAR_INT.
+	 * <p>
+	 * VAR_INT encoding uses 7 bits per byte for data, with the MSB as continuation flag.
+	 * Reading continues while the continuation bit is set.
+	 * </p>
 	 */
-	private byte[] intToBytes(int data) {
-		byte[] bytes = new byte[4];
-		bytes[0] = (byte) (data & 0xff);
-		bytes[1] = (byte) ((data & 0xff00) >> 8);
-		bytes[2] = (byte) ((data & 0xff0000) >> 16);
-		bytes[3] = (byte) ((data & 0xff000000) >> 24);
-		return bytes;
+	private int readVarInt(InputStream in) throws IOException {
+		byte readByte;
+		int loopCount = 0;
+		int result = 0;
+
+		while (true) {
+			int b = in.read();
+			if (b == -1) {
+				throw new IOException("Unexpected end of stream while reading VAR_INT");
+			}
+			readByte = (byte) b;
+			result |= (((int) readByte) & 0b1111111) << (loopCount * 7);
+
+			if ((readByte & (1 << 7)) == 0) {
+				break;
+			}
+			loopCount++;
+		}
+
+		return result;
 	}
 
 	/**
-	 * Convert byte array in little-endian format (LSB first) to int.
-	 * Compatible with xueli.utils.Bytes.getInt(byte[]).
+	 * Write a VAR_INT to the output stream.
+	 * Compatible with xueli.game2.network.PrimitiveCodec.VAR_INT.
+	 * <p>
+	 * VAR_INT encoding uses 7 bits per byte for data, with the MSB as continuation flag.
+	 * Each byte has the continuation bit set if more bytes follow.
+	 * </p>
 	 */
-	private int bytesToInt(byte[] bytes) {
-		return (0xff & bytes[0]) | (0xff00 & (bytes[1] << 8)) |
-		       (0xff0000 & (bytes[2] << 16)) | (0xff000000 & (bytes[3] << 24));
+	private void writeVarInt(int value, OutputStream out) throws IOException {
+		int i = value;
+		int nextI;
+		boolean flag;
+		byte thisByte;
+
+		while (true) {
+			thisByte = (byte) (i & 0b1111111);
+
+			nextI = i >>> 7;
+			flag = nextI != 0;
+			if (flag) {
+				thisByte |= (1 << 7);
+			}
+
+			out.write(thisByte);
+
+			if (!flag) {
+				break;
+			}
+			i = nextI;
+		}
 	}
 }

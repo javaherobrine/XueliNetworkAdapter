@@ -1,6 +1,7 @@
 package io.github.javaherobrine.net.adapter.xueli;
 import io.github.javaherobrine.net.*;
 import java.io.*;
+import java.util.*;
 /**
  * Binding of xueli.game2.network.Packet
  * <p>
@@ -8,13 +9,19 @@ import java.io.*;
  * EventContent system. It provides packet serialization via encode()/initFrom()
  * and packet processing via the PacketProcessor pattern.
  * </p>
+ * <p>
+ * Unlike LovelyZeeiam's Packet which doesn't have built-in processing,
+ * this adapter supports multiple processors per packet, matching CraftGame TCP
+ * Library's EventContent design.
+ * </p>
  *
  * <h2>Usage:</h2>
  * <pre>
  * class MyPacket extends Packet {
  *     public MyPacket() {
  *         this.classID = 1;
- *         this.setProcessor(new MyPacketProcessor());
+ *         this.addProcessor(new LoggingProcessor());
+ *         this.addProcessor(new ValidationProcessor());
  *     }
  *
  *     {@literal @}Override
@@ -33,7 +40,7 @@ import java.io.*;
 public abstract class Packet extends EventContent{
 	private static final long serialVersionUID = 1L;
 	public int classID;
-	private PacketProcessor processor;
+	private List<PacketProcessor> processors = new ArrayList<>();
 
 	/**
 	 * Encode packet data to byte array for transmission.
@@ -54,32 +61,51 @@ public abstract class Packet extends EventContent{
 	public abstract void initFrom(InputStream in) throws IOException;
 
 	/**
-	 * Set the packet processor for handling this packet when received.
+	 * Add a packet processor for handling this packet when received.
+	 * Multiple processors can be added and will be executed in order.
 	 *
-	 * @param processor the processor to handle this packet
+	 * @param processor the processor to add
 	 */
-	public void setProcessor(PacketProcessor processor) {
-		this.processor = processor;
+	public void addProcessor(PacketProcessor processor) {
+		processors.add(processor);
 	}
 
 	/**
-	 * Get the current packet processor.
+	 * Remove a packet processor.
 	 *
-	 * @return the current processor, or null if none set
+	 * @param processor the processor to remove
+	 * @return true if the processor was removed, false if it wasn't present
 	 */
-	public PacketProcessor getProcessor() {
-		return processor;
+	public boolean removeProcessor(PacketProcessor processor) {
+		return processors.remove(processor);
 	}
 
 	/**
-	 * Called when packet is received. Delegates to the PacketProcessor if set.
+	 * Get all packet processors.
+	 *
+	 * @return unmodifiable list of processors
+	 */
+	public List<PacketProcessor> getProcessors() {
+		return Collections.unmodifiableList(processors);
+	}
+
+	/**
+	 * Clear all packet processors.
+	 */
+	public void clearProcessors() {
+		processors.clear();
+	}
+
+	/**
+	 * Called when packet is received. Delegates to all registered PacketProcessors.
+	 * All processors are executed in the order they were added.
 	 *
 	 * @param serverside true if received on server, false if on client
 	 * @throws Exception if processing fails
 	 */
 	@Override
 	public void recvExec(boolean serverside) throws Exception {
-		if (processor != null) {
+		for (PacketProcessor processor : processors) {
 			if (serverside) {
 				processor.processServerside(this);
 			} else {

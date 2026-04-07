@@ -18,16 +18,27 @@
  * XueliProtocol protocol = new XueliProtocol();
  * protocol.registerPacket(1, () -> new LoginPacket());
  *
- * // Create packet with processor
+ * // Create packet with multiple processors
  * class LoginPacket extends Packet {
  *     public LoginPacket() {
  *         this.classID = 1;
- *         this.setProcessor(new LoginProcessor());
+ *         // Multiple processors can be added - they execute in order
+ *         this.addProcessor(new LoggingProcessor());
+ *         this.addProcessor(new LoginProcessor());
  *     }
  *     // implement encode() and initFrom()
  * }
  *
- * // Processor handles packet logic
+ * // Processors handle packet logic
+ * class LoggingProcessor implements PacketProcessor {
+ *     public void processServerside(Packet packet) {
+ *         System.out.println("Received: " + packet);
+ *     }
+ *     public void processClientside(Packet packet) {
+ *         System.out.println("Received: " + packet);
+ *     }
+ * }
+ *
  * class LoginProcessor implements PacketProcessor {
  *     public void processServerside(Packet packet) {
  *         // Handle login on server

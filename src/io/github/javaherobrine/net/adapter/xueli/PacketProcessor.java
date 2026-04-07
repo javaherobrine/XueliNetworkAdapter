@@ -7,6 +7,12 @@ package io.github.javaherobrine.net.adapter.xueli;
  * xueli.game2.network packet processing, adapted for CraftGame TCP Library's
  * EventContent::recvExec pattern.
  * </p>
+ * <p>
+ * Unlike LovelyZeeiam's Packet implementation, CraftGame TCP Library's EventContent
+ * supports multiple processors per packet. This allows for modular packet handling
+ * where different aspects can be handled by different processors (e.g., logging,
+ * validation, business logic).
+ * </p>
  *
  * <h2>Usage Example:</h2>
  * <pre>
@@ -28,8 +34,9 @@ package io.github.javaherobrine.net.adapter.xueli;
  *     }
  * }
  *
- * // Set processor for packet types
- * myPacket.setProcessor(new MyPacketProcessor());
+ * // Add multiple processors to a packet
+ * myPacket.addProcessor(new LoggingProcessor());
+ * myPacket.addProcessor(new MyPacketProcessor());
  * </pre>
  */
 public interface PacketProcessor {

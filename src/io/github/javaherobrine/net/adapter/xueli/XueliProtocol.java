@@ -4,6 +4,29 @@ import java.util.*;
 import java.util.function.Supplier;
 import io.github.javaherobrine.net.*;
 
+/**
+ * Protocol adapter for LovelyZeeiam's network implementation specifications.
+ * <p>
+ * This protocol bridges CraftGame TCP Library's Protocol/EventContent system
+ * with xueli.game2.network.Packet format. It serializes packets with their classID
+ * for proper type identification during transmission.
+ * </p>
+ *
+ * <h2>Usage Example:</h2>
+ * <pre>
+ * XueliProtocol protocol = new XueliProtocol();
+ *
+ * // Register packet types before using
+ * protocol.registerPacket(1, () -> new LoginPacket());
+ * protocol.registerPacket(2, () -> new ChatPacket());
+ *
+ * // Use with CraftGame TCP Library
+ * protocol.send(myPacket);
+ * Packet received = protocol.next();
+ * </pre>
+ *
+ * @see Packet
+ */
 public class XueliProtocol extends Protocol{
 	private final Map<Integer, Supplier<Packet>> packetRegistry = new HashMap<>();
 
